@@ -15,38 +15,43 @@ class PropiedadesController{
     
         // Validar campos requeridos
         $requiredFields = ['domicilio', 'localidad_id', 'cantidad_habitaciones', 'cantidad_banios', 'cochera', 'cantidad_huespedes', 'fecha_inicio_disponibilidad', 'cantidad_dias', 'disponible', 'valor_noche', 'moneda_id', 'tipo_propiedad_id', 'imagen', 'tipo_imagen'];
+        $camposFaltantes = []; // Array para almacenar campos faltantes
         foreach ($requiredFields as $field) {
             if (!isset($data[$field]) || empty($data[$field])) {
-                $status = 'Error'; 
-                $mensaje = "El campo $field es requerido"; 
-                $payload = codeResponseGeneric($status, $mensaje, 400);
-                return responseWrite($response, $payload);
+                $camposFaltantes[] = $field; // Agrega el campo faltante al array
             }
         }
+        if (!empty($camposFaltantes)) {
+            $status = 'Error'; 
+            $mensaje = "Los siguientes campos son requeridos: " . implode(', ', $camposFaltantes); 
+            $payload = codeResponseGeneric($status ,$mensaje, 400);
+            return responseWrite($response, $payload);
+}
+
     
         try {
             // Insertar la nueva propiedad en la base de datos
             $query = $connection->prepare("INSERT INTO propiedades (domicilio, localidad_id, cantidad_habitaciones, cantidad_banios, cochera, cantidad_huespedes, fecha_inicio_disponibilidad, cantidad_dias, disponible, valor_noche, moneda_id, tipo_propiedad_id, imagen, tipo_imagen) VALUES (:domicilio, :localidad_id, :cantidad_habitaciones, :cantidad_banios, :cochera, :cantidad_huespedes, :fecha_inicio_disponibilidad, :cantidad_dias, :disponible, :valor_noche, :moneda_id, :tipo_propiedad_id, :imagen, :tipo_imagen)");
-            $query->bindParam(':domicilio', $data['domicilio'], \PDO::PARAM_STR);
-            $query->bindParam(':localidad_id', $data['localidad_id'], \PDO::PARAM_INT);
-            $query->bindParam(':cantidad_habitaciones', $data['cantidad_habitaciones'], \PDO::PARAM_INT);
-            $query->bindParam(':cantidad_banios', $data['cantidad_banios'], \PDO::PARAM_INT);
-            $query->bindParam(':cochera', $data['cochera'], \PDO::PARAM_BOOL);
-            $query->bindParam(':cantidad_huespedes', $data['cantidad_huespedes'], \PDO::PARAM_INT);
-            $query->bindParam(':fecha_inicio_disponibilidad', $data['fecha_inicio_disponibilidad'], \PDO::PARAM_STR);
-            $query->bindParam(':cantidad_dias', $data['cantidad_dias'], \PDO::PARAM_INT);
-            $query->bindParam(':disponible', $data['disponible'], \PDO::PARAM_BOOL);
-            $query->bindParam(':valor_noche', $data['valor_noche'], \PDO::PARAM_INT);
-            $query->bindParam(':moneda_id', $data['moneda_id'], \PDO::PARAM_INT);
-            $query->bindParam(':tipo_propiedad_id', $data['tipo_propiedad_id'], \PDO::PARAM_INT);
-            $query->bindParam(':imagen', $data['imagen'], \PDO::PARAM_STR);
-            $query->bindParam(':tipo_imagen', $data['tipo_imagen'], \PDO::PARAM_STR);
-            $query->execute();
-    
+            $valores = [
+                ':domicilio' => $data['domicilio'],
+                ':localidad_id' => $data['localidad_id'],
+                ':cantidad_habitaciones' => $data['cantidad_habitaciones'],
+                ':cantidad_banios' => $data['cantidad_banios'],
+                ':cochera' => $data['cochera'],
+                ':cantidad_huespedes' => $data['cantidad_huespedes'],
+                ':fecha_inicio_disponibilidad' => $data['fecha_inicio_disponibilidad'],
+                ':cantidad_dias' => $data['cantidad_dias'],
+                ':disponible' => $data['disponible'],
+                ':valor_noche' => $data['valor_noche'],
+                ':moneda_id' => $data['moneda_id'],
+                ':tipo_propiedad_id' => $data['tipo_propiedad_id'],
+                ':imagen' => $data['imagen'],
+                ':tipo_imagen' => $data['tipo_imagen']
+            ];
+            $query->execute($valores);
             // Obtener el ID de la nueva propiedad insertada
             $id = $connection->lastInsertId();
     
-            // Respuesta de éxito
             $status = 'Success';
             $mensaje = 'Propiedad creada correctamente';
             $payload = ['id' => $id];

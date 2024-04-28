@@ -8,43 +8,60 @@ require_once __DIR__ . '/../../database.php';
 class InquilinosController {
 
     // POST /inquilinos    
-    public function crearInquilino (Request $request, Response $response) {
-        $connection=getConnection();
-        try{
-            $datos= $request -> getParsedBody();
-            if(isset($datos['id'],$datos['apellido'],$datos['nombre'],$datos['documento'],$datos['email'],$datos['activo'])) {
-                    $id= $datos['id']; 
-                    $query= $connection->query("SELECT id from inquilinos WHERE id=$id LIMIT 1");
-                    if($query->rowCount()>0) {
-                        $status='Error'; $mensaje='Ya existe un inquilino con ese ID';
-                        $payload=codeResponseGeneric($status,$mensaje,400);
-                        return responseWrite($response,$payload);
-                    } else { 
-                        $documento = $datos['documento'];
-                        $query=$connection->query("SELECT documento FROM inquilinos WHERE documento=$documento LIMIT 1");
-                        if($query->rowCount()>0){
-                            $status='Error';$mensaje='Ya hay un documento registrado con ese valor'; 
-                            $payload=codeResponseGeneric($status,$mensaje,400);
-                            return responseWrite($response,$payload);
-                        } else {
-                            $query=$connection->prepare('INSERT INTO inquilinos (id,apellido,nombre,documento,email,activo) VALUES (:id,:apellido,:nombre,:documento,:email,:activo)');
-                            $query->bindValue(':id',$datos['id']); $query->bindValue(':apellido',$datos['apellido']); $query->bindValue(':nombre',$datos['nombre']); $query->bindValue(':documento',$datos['documento']); $query->bindValue(':email',$datos['email']); $query->bindValue(':activo',$datos['activo']);
-                            $query->execute();
-                            $status='Success'; $mensaje='Inquilino agregado exitosamente'; $payload=codeResponseGeneric($status,$mensaje,200);
-                            return responseWrite($response,$payload);
-                        }
-                    }
-            } else {
-                $status='Error'; $mensaje='Todos los campos son requeridos';
-                $payload=codeResponseGeneric($status,$mensaje,400);
-                return responseWrite($response,$payload);
+    public function crearInquilino(Request $request, Response $response) {
+        $connection = getConnection();
+        try {
+            $datos = $request->getParsedBody();
+            // Validar campos requeridos
+            $requiredFields = ['id', 'apellido', 'nombre', 'documento', 'email', 'activo'];
+            $camposFaltantes = []; // Array para almacenar campos faltantes
+            foreach ($requiredFields as $field) {
+                if (!isset($datos[$field])) {
+                    $camposFaltantes[] = $field; // Agrega el campo faltante al array
+                }
             }
+            if (!empty($camposFaltantes)) {
+                $mensaje = "Los siguientes campos son requeridos: " . implode(', ', $camposFaltantes);
+                $payload = codeResponseGeneric('Error', $mensaje, 400);
+                return responseWrite($response, $payload);
+            }
+    
+            // Verificar si ya existe un inquilino con el ID proporcionado
+            $id = $datos['id'];
+            $query = $connection->query("SELECT id FROM inquilinos WHERE id=$id LIMIT 1");
+            if ($query->rowCount() > 0) {
+                $payload = codeResponseGeneric('Error', 400, 'Ya existe un inquilino con ese ID');
+                return responseWrite($response, $payload);
+            }
+    
+            // Verificar si ya existe un inquilino con el documento proporcionado
+            $documento = $datos['documento'];
+            $query = $connection->query("SELECT documento FROM inquilinos WHERE documento=$documento LIMIT 1");
+            if ($query->rowCount() > 0) {
+                $payload = codeResponseGeneric('Error', 400, 'Ya hay un documento registrado con ese valor');
+                return responseWrite($response, $payload);
+            }
+    
+            // Insertar nuevo inquilino
+            $query = $connection->prepare('INSERT INTO inquilinos (id, apellido, nombre, documento, email, activo) VALUES (:id, :apellido, :nombre, :documento, :email, :activo)');
+            $query->bindValue(':id', $datos['id']);
+            $query->bindValue(':apellido', $datos['apellido']);
+            $query->bindValue(':nombre', $datos['nombre']);
+            $query->bindValue(':documento', $datos['documento']);
+            $query->bindValue(':email', $datos['email']);
+            $query->bindValue(':activo', $datos['activo']);
+            $query->execute();
+    
+            // Respuesta exitosa
+            $payload = codeResponseGeneric('Success', 200, 'Inquilino agregado exitosamente');
+            return responseWrite($response, $payload);
         } catch (\PDOException $e) {
-            $payload=codeResponseBad();
-            return responseWrite($response,$payload);
-
+            // Error de base de datos
+            $payload = codeResponseBad();
+            return responseWrite($response, $payload);
         }
     }
+    
     // PUT /inquilinos/{id}   
     public function editarInquilino (Request $request, Response $response, $args){
         $connection= getConnection();
