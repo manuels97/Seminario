@@ -49,7 +49,7 @@ class ReservasController {
         }
         
 
-        // Verificar si la propiedad está disponible
+        // Verificar si la propiedad está disponible en esa fecha
         function propiedadDisponible($propiedadId) {
             $connection = getConnection();
             $sql = "SELECT * FROM propiedades WHERE id = :propiedad_id ";
@@ -90,12 +90,68 @@ class ReservasController {
         $valor_total = $valor_por_noche * $data['cantidad_noches'];
 
         // Verificar si alguno de los datos no es válido
-        if (
-            !inquilinoActivo($data['inquilino_id']) ||
-            !propiedadDisponible($data['propiedad_id']) 
-        ) {
-            $valid = false;
+        
+
+
+    // Función para verificar si la fecha de reserva es mayor que la fecha de inicio de disponibilidad de la propiedad
+    function fechaReservaMayorInicioDisponibilidad($fechaReserva, $propiedadId) {
+        $connection = getConnection();
+        $sql = "SELECT fecha_inicio_disponibilidad FROM propiedades WHERE id = :propiedad_id";
+        $query = $connection->prepare($sql);
+        $query->execute([':propiedad_id' => $propiedadId]);
+        $result = $query->fetch();
+
+        if ($result && strtotime($fechaReserva) >= strtotime($result['fecha_inicio_disponibilidad'])) {
+            return true;
+        } else {
+            return false;
         }
+    }
+
+    // Verificar si la fecha de reserva es mayor que la fecha de inicio de disponibilidad de la propiedad
+    if (!fechaReservaMayorInicioDisponibilidad($data['fecha_desde'], $data['propiedad_id'])) {
+        $valid = false;
+        $payload = codeResponseGeneric("La fecha de reserva debe ser mayor o igual que la fecha de inicio de disponibilidad de la propiedad.", "Bad Request", 400);
+        return responseWrite($response, $payload);
+    }
+
+    
+    function propiedadDisponibleParaReserva($propiedadId, $fechaDesde, $cantidadNoches) {
+        $connection = getConnection();
+        $sql = "SELECT COUNT(*) as total 
+                FROM reservas 
+                WHERE propiedad_id = :propiedad_id 
+                AND fecha_desde <= DATE_ADD(:fecha_desde, INTERVAL :cantidad_noches DAY) 
+                AND DATE_ADD(fecha_desde, INTERVAL cantidad_noches DAY) >= :fecha_desde";
+        $query = $connection->prepare($sql);
+        $query->execute([
+            ':propiedad_id' => $propiedadId,
+            ':fecha_desde' => $fechaDesde,
+            ':cantidad_noches' => $cantidadNoches
+        ]);
+        $result = $query->fetch();
+    
+        if ($result && $result['total'] == 0) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+    if (!propiedadDisponibleParaReserva($data['propiedad_id'], $data['fecha_desde'], $data['cantidad_noches'])) {
+        $valid = false;
+        $payload = codeResponseGeneric("La propiedad está OCUPADA para las fechas de reserva especificadas.", "Bad Request", 400);
+        return responseWrite($response, $payload);
+    }
+    
+    
+    if (!inquilinoActivo($data['inquilino_id']) ||
+        !propiedadDisponible($data['propiedad_id']) || 
+        !fechaReservaMayorInicioDisponibilidad($data['fecha_desde'], $data['propiedad_id']) || 
+        !propiedadDisponibleParaReserva($data['propiedad_id'], $data['fecha_desde'], $data['cantidad_noches'])) {
+        $valid = false;
+    }
+    
+    
 
         // Insertar la reserva en la base de datos solo si todos los datos son válidos
         if ($valid) {
