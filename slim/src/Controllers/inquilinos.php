@@ -42,64 +42,74 @@ class InquilinosController {
         }
     }
     // PUT /inquilinos/{id}   
-    public function editarInquilino(Request $request, Response $response, $args)
-{
-    $id_url = $args['id']; 
-    if (!is_numeric($id_url)) {
-        $status = 'Error';
-        $mensaje = 'ID inválido'; 
-        $payload = codeResponseGeneric($status, $mensaje, 400);
-        return responseWrite($response, $payload);
-    }
-    try {
-        
-        $connection = getConnection();
-        $query = $connection->query("SELECT id FROM inquilinos WHERE id=$id_url LIMIT 1");
-        if ($query->rowCount() == 0) {
-            $status = 'Error';
-            $mensaje = 'No se encuentra el ID'; 
-            $payload = codeResponseGeneric($status, $mensaje, 404);
-            return responseWrite($response, $payload);
+    public function editarInquilino (Request $request, Response $response, $args){
+        $id_url= $args['id']; 
+        if (!is_numeric($id_url)) {
+            $status='Error'; $mensaje='ID invalido'; $payload=codeResponseGeneric($status,$mensaje,400);
+            return responseWrite($response,$payload);
         }
-        $datos = $request->getParsedBody();
-        if (empty($datos)) {
-            parse_str(file_get_contents('php://input'), $datos);
+        try {
+            $connection= getConnection();
+            $query= $connection->query("SELECT id FROM inquilinos WHERE id=$id_url LIMIT 1");
+            if($query->rowCount()==0) {
+                $status='Error';$mensaje='No se encuntra el ID'; $payload=codeResponseGeneric($status,$mensaje,404);
+                return responseWrite($response,$payload);
+            }
+            $datos= $request->getParsedBody();
+            function faltanDatos($requiredFields, $datos) {
+                foreach ($requiredFields as $campo) {
+                    if (!isset($datos[$campo])) {
+                        $status = 'Error';
+                        $mensaje = 'Falta el campo ' . $campo; 
+                        return codeResponseGeneric($status, $mensaje, 400);
+                    }
+                }
+                return null; // No faltan datos
+            }
+            
+            // comprobar que no falten datos
+            $requiredFields=['apellido','nombre','documento','email','activo'];
+            $payload=faltanDatos($requiredFields,$datos);
+            if (isset($payload)) {
+                return responseWrite($response,$payload);
+            }  
+            $documento=$datos['documento'];
+            $query=$connection->query("SELECT id FROM inquilinos where documento=$documento");
+            // Verifico que el documento encontrado no sea el del id que quiero editar 
+          
+            if($query->rowCount()>0){
+                $consulta= $query-> fetch(\PDO::FETCH_ASSOC);
+                $idConsulta=$consulta['id'];
+                if($idConsulta!=$id_url){
+                    $status='Error'; $mensaje='El documento proporcionado ya se encuentra en uso'; $payload=codeResponseGeneric($status,$mensaje,400);
+                    return responseWrite($response,$payload);
+                }
+            } 
+            $query=$connection->prepare("UPDATE inquilinos SET
+                      apellido= :apellido,
+                      nombre= :nombre,
+                      documento= :documento,
+                      email= :email,
+                      activo= :activo
+                WHERE id=:id 
+            ");
+            $elementos=[
+                ':apellido'=> $datos['apellido'],
+                ':nombre'=>$datos['nombre'],
+                ':documento'=>$datos['documento'],
+                ':email'=>$datos['email'],
+                ':activo'=>$datos['activo'],
+                ':id'=>$id_url
+            ];
+            $query->execute($elementos);
+            $status='SUCCESS'; $mensaje='Inquilino editado exitosamente'; 
+            $payload=codeResponseGeneric($status,$mensaje,200);
+            return responseWrite($response,$payload);
+        } catch (\PDOException $e) {
+            $payload=codeResponseBad();
+            return responseWrite($response,$payload);
         }
-
-        // comprobar que no falten datos
-        // $requiredFields = ['apellido', 'nombre', 'documento', 'email', 'activo'];
-        // $payload = faltanDatos($requiredFields, $datos);
-        // if (isset($payload)) {
-        //     return responseWrite($response, $payload);
-        // }  
-        
-        $query = $connection->prepare("UPDATE inquilinos SET
-                apellido = :apellido,
-                nombre = :nombre,
-                documento = :documento,
-                email = :email,
-                activo = :activo
-            WHERE id = :id  
-        ");
-        $elementos = [
-            ':apellido' => $datos['apellido'],
-            ':nombre' => $datos['nombre'],
-            ':documento' => $datos['documento'],
-            ':email' => $datos['email'],
-            ':activo' => $datos['activo'],
-            ':id' => $id_url
-        ];
-        $query->execute($elementos);
-        $status = 'SUCCESS';
-        $mensaje = 'Inquilino editado exitosamente'; 
-        $payload = codeResponseGeneric($status, $mensaje, 200);
-        return responseWrite($response, $payload);
-    } catch (\PDOException $e) {
-        $payload = codeResponseBad();
-        return responseWrite($response, $payload);
     }
-}
-
     
     // GET /inquilinos
     public function listar (Request $request, Response $response) {
@@ -214,14 +224,13 @@ class InquilinosController {
             $mensaje = 'ID no válido'; 
             $payload = codeResponseGeneric($status, $mensaje, 400);
             return responseWrite($response, $payload);
-        } 
+        }
         try {    
              $connection = getConnection(); 
              // Realiza la consulta SQL
-             $query = $connection->prepare("DELETE FROM inquilinos WHERE id = :id");
-             $query -> bindParam (':id', $id_url, \PDO::PARAM_INT);
+             $query = $connection->prepare('DELETE FROM inquilinos WHERE id=:id');
+             $query -> bindValue(':id', $id_url);
              $query-> execute();
-             
              // Preparamos la respuesta json 
              if($query->rowCount()>0) {
                 $status='Success'; $mensaje='INQUILINO BORRADO EXITOSAMENTE';
