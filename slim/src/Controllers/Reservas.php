@@ -5,9 +5,35 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\Factory\AppFactory;
 require_once __DIR__ . '/../../database.php';
 
-class ReservasController {
 
-    
+class ReservasController {
+    private function obtenerValorPropiedadPorNoche($propiedadId) {
+        $connection = getConnection();
+        $sql = "SELECT valor_noche FROM propiedades WHERE id = :id";
+        $query = $connection->prepare($sql);
+        $query->execute([':id' => $propiedadId]);
+        $result = $query->fetch();
+        var_dump($result['valor_noche']);
+        return $result['valor_noche'];
+    }
+    // private function inquilinoActivo($inquilinoId, &$mensaje) {
+    //     $connection = getConnection();
+    //     $sql = "SELECT * FROM inquilinos WHERE id = :id AND activo = 1";
+    //     $query = $connection->prepare($sql);
+    //     $query->execute([':id' => $inquilinoId]);
+    //     $result = $query->fetch();
+    //     if (!$result) {
+    //         // Si no se encontró ningún resultado, el inquilino no existe
+    //         $mensaje="No existe ese inquilino";
+    //         return false;
+    //     } else if ($result['activo'] == 0) {
+    //         $mensaje="El inquilino especificado no está activo";
+    //         return false;
+    //     } else {
+    //         // Si el inquilino existe y está activo
+    //         return true;
+    //     }
+    // } 
     public function agregarReserva(Request $request, Response $response) {
         $connection = getConnection();
         $data = $request->getParsedBody(); // Obtener los datos enviados en el cuerpo de la solicitud
@@ -29,10 +55,10 @@ class ReservasController {
             $query->execute([':id' => $inquilinoId]);
             $result = $query->fetch();
         
-            if (!$result) {
-                // Si no se encontró ningún resultado, el inquilino no existe
-                return "No existe ese inquilino";
-            } else if ($result['activo'] === 0) {
+            // if (!$result) {
+            //     // Si no se encontró ningún resultado, el inquilino no existe
+            //     return "No existe ese inquilino";
+            if ($result['activo'] === 0 ||  !$result) {
                 // Si el inquilino está inactivo
                 return "El inquilino especificado no está activo";
             } else {
@@ -205,10 +231,10 @@ class ReservasController {
         }
     
     }
+    
     // DELETE 
     public function eliminarReserva (Request $request, Response $response, $args){
-        $id = $args['id']; // Obtener el ID del tipo de propiedad de los argumentos de la URL
-            // Verificar si el ID es numérico
+        $id = $args['id'];
         if (!is_numeric($id)) {
                 $status = 'Error';
                 $mensaje = 'ID NO VALIDO';
@@ -222,8 +248,6 @@ class ReservasController {
                 $reserva= $query->fetch(\PDO::FETCH_ASSOC);
                 $fecha_incio= $reserva['fecha_desde']; 
                 $fecha_actual= date('Y-m-d');
-                var_dump($fecha_incio);
-                var_dump($fecha_actual);
                 if($fecha_actual<$fecha_incio){
                     $query=$connection->prepare('DELETE FROM reservas WHERE id=:id');
                     $query->bindValue(':id',$id);   
@@ -246,33 +270,18 @@ class ReservasController {
             $payload= codeRespondeBad();
             return responseWrite($response,$payload);
         }
-
     }
-
     //PUT
-    
     public function editarReserva(Request $request, Response $response, $args) {
-        // Función para obtener el valor por noche de una propiedad
-        function obtenerValorPropiedadPorNoche($propiedadId) {
-            $connection = getConnection();
-            $sql = "SELECT valor_noche FROM propiedades WHERE id = :id";
-            $query = $connection->prepare($sql);
-            $query->execute([':id' => $propiedadId]);
-            $result = $query->fetch();
-            return $result ? $result['valor_noche'] : false;
-        }
-    
         $connection = getConnection();
         $data = $request->getParsedBody(); // Obtener los datos enviados en el cuerpo de la solicitud
-    
-        // Obtener el ID de la reserva de los argumentos de la URL
         $id = $args['id'];
-    
-        // Verificar si el ID es numérico
         if (!is_numeric($id)) {
-            $errors[] = "ID no válido.";
+                $status = 'Error';
+                $mensaje = 'ID NO VALIDO';
+                $payload = codeResponseGeneric($status, $mensaje, 400);
+                return responseWrite($response, $payload);
         }
-    
         // Verificar que todos los datos requeridos estén presentes
         $requiredFields = ['propiedad_id', 'inquilino_id', 'fecha_desde', 'cantidad_noches'];
         foreach ($requiredFields as $field) {
@@ -285,46 +294,32 @@ class ReservasController {
             $payload = codeResponseGeneric("Error en los datos proporcionados.", ['errors' => $errors], 400);
             return responseWrite($response, $payload);
         }
-    
         // Verificar si la fecha de inicio ya pasó
+        
         try {
             $query = $connection->query("SELECT fecha_desde FROM reservas WHERE id=$id LIMIT 1");
             if ($query->rowCount() > 0) {
                 $reserva = $query->fetch(\PDO::FETCH_ASSOC);
                 $fechaInicio = $reserva['fecha_desde'];
                 $fechaActual = date('Y-m-d');
-    
                 if ($fechaActual < $fechaInicio) {
                     // La reserva aún no ha comenzado, se permite la edición
-                    
                     // Verificar si el inquilino existe
                     $queryInquilino = $connection->prepare("SELECT * FROM inquilinos WHERE id = :inquilino_id");
                     $queryInquilino->execute([':inquilino_id' => $data['inquilino_id']]);
-                    $resultInquilino = $queryInquilino->fetch();
-                    if (!$resultInquilino) {
-                        // Si no se encontró ningún resultado, el inquilino no existe
-                        $errores[] = "No existe ese inquilino";
-                    } else if ($resultInquilino['activo'] === 0) {
-                        // Si el inquilino está inactivo
-                        $errores[] = "El inquilino especificado no está activo";
-                    }
-                    
+                    if($queryInquilino->rowCount()==0) {
+                        $status='Error'; $mensaje='No existe el inquilino con ese ID'; 
+                        $payload=codeResponseGeneric($status,$mensaje,400);
+                        return responseWrite($response,$payload);
+                    } 
                     // Verificar si la propiedad existe
                     $queryPropiedad = $connection->prepare("SELECT * FROM propiedades WHERE id = :propiedad_id");
                     $queryPropiedad->execute([':propiedad_id' => $data['propiedad_id']]);
-                    $resultPropiedad = $queryPropiedad->fetch();
-                    if (!$resultPropiedad) {
-                        $errores[] = "No existe esa propiedad";
-                    } else if ($resultPropiedad['disponible'] === 0) {
-                        $errores[] = "La propiedad especificada no está activa";
-                    }
-    
-                    // Si hay errores, devolverlos
-                    if (!empty($errores)) {
-                        $payload = codeResponseGeneric("Error en los datos proporcionados.",  $errores,400);
-                        return responseWrite($response, $payload);
-                    }
-    
+                    if($queryPropiedad->rowCount()==0) {
+                        $status='Error'; $mensaje='No existe la propiedad con ese ID'; 
+                        $payload=codeResponseGeneric($status,$mensaje,400);
+                        return responseWrite($response,$payload);
+                    } 
                     // Actualizar la reserva en la base de datos
                     $sql = "UPDATE reservas 
                             SET propiedad_id = :propiedad_id, 
@@ -333,11 +328,10 @@ class ReservasController {
                                 cantidad_noches = :cantidad_noches,
                                 valor_total = :valor_total
                             WHERE id = :id";
-    
-                    $valor_por_noche = obtenerValorPropiedadPorNoche($data['propiedad_id']);
-                
+                    
+                    $valor_por_noche = $this->obtenerValorPropiedadPorNoche($data['propiedad_id']);
                     $valor_total = $valor_por_noche * $data['cantidad_noches'];
-    
+
                     $values = [
                         ':id' => $id,
                         ':propiedad_id' => $data['propiedad_id'],
@@ -346,32 +340,25 @@ class ReservasController {
                         ':cantidad_noches' => $data['cantidad_noches'],
                         ':valor_total' => $valor_total,
                     ];
-    
-                    try {
-                        $query = $connection->prepare($sql);
-                        $query->execute($values);
-                        $payload = codeResponseGeneric("Reserva actualizada correctamente.", 200, "OK");
-                        return responseWrite($response, $payload);
-                    } catch (\PDOException $e) {
-                        $payload = codeResponseGeneric("Error al actualizar la reserva.", 500, "Internal Server Error");
-                        return responseWrite($response, $payload, 500);
-                    }
+                    $query = $connection->prepare($sql);
+                    $query->execute($values);
+                    $payload = codeResponseGeneric("Reserva actualizada correctamente.", "OK", 200);
+                    return responseWrite($response, $payload);
+                    
                 } else {
                     // La reserva ya ha comenzado, no se permite la edición
-                    $payload = codeResponseGeneric("La reserva ya ha comenzado y no puede ser editada.", 400, "Bad Request");
-                    return responseWrite($response, $payload, 400);
+                    $payload = codeResponseGeneric("La reserva ya ha comenzado y no puede ser editada.", "Bad Request", 400);
+                    return responseWrite($response, $payload);
                 }
             } else {
                 // No se encuentra la reserva con el ID proporcionado
-                $payload = codeResponseGeneric("No se encuentra la reserva con el ID proporcionado.", 404, "Not Found");
-                return responseWrite($response, $payload, 404);
+                $payload = codeResponseGeneric("No se encuentra la reserva con el ID proporcionado.", "Not Found", 404);
+                return responseWrite($response, $payload);
             }
         } catch (\PDOException $e) {
             // Error de base de datos
-            $payload = codeResponseGeneric("Error de base de datos al buscar la reserva.", 500, "Internal Server Error");
-            return responseWrite($response, $payload, 500);
+            $payload = codeResponseGeneric("Error de base de datos al buscar la reserva.", "Internal Server Error", 500);
+            return responseWrite($response, $payload);
         }
     }
-    
-
 }
