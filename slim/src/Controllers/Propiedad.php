@@ -84,7 +84,7 @@ class PropiedadesController{
                 ':tipo_imagen' => $data['tipo_imagen'] ?? null
             ];
             
-            $query->execute($valores);
+            $query->execute($valores);  
             // Obtener el ID de la nueva propiedad insertada
             $id = $connection->lastInsertId();
     
@@ -187,6 +187,11 @@ class PropiedadesController{
             $mensaje = 'ID no válido'; 
             $payload = codeResponseGeneric($status, $mensaje, 400);
             return responseWrite($response, $payload);
+        }
+        $requiredFields = ['domicilio', 'localidad_id', 'cantidad_huespedes', 'fecha_inicio_disponibilidad', 'cantidad_dias', 'disponible', 'valor_noche', 'tipo_propiedad_id'];
+        $payload=faltanDatos($requiredFields,$data);
+        if (isset($payload)) {
+            return responseWrite($response,$payload);
         }
     
         try {
